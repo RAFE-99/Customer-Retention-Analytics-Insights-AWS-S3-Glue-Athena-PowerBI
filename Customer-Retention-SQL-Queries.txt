@@ -1,0 +1,234 @@
+#to show tables in Database
+SHOW TABLES IN telco_db;
+
+
+#to show the rows of table top 5
+SELECT * FROM telco_db.telco_table_newtelco LIMIT 5;
+
+
+#to create a table
+CREATE EXTERNAL TABLE IF NOT EXISTS telco_db.telco_table_newtelco (
+    customerid        string,
+    gender            string,
+    seniorcitizen     bigint,
+    partner           string,
+    dependents        string,
+    tenure            bigint,
+    phoneservice      string,
+    multiplelines     string,
+    internetservice   string,
+    onlinesecurity    string,
+    onlinebackup      string,
+    deviceprotection  string,
+    techsupport       string,
+    streamingtv       string,
+    streamingmovies   string,
+    contract          string,
+    paperlessbilling  string,
+    paymentmethod     string,
+    monthlycharges    double,
+    totalcharges      double,
+    churn             string
+)
+ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde'
+WITH SERDEPROPERTIES (
+    "separatorChar" = ",",
+    "quoteChar"     = "\"",
+    "escapeChar"    = "\\"
+)
+LOCATION 's3://bucket-rafe1/curated/newtelco/'
+TBLPROPERTIES ('skip.header.line.count'='1');
+
+
+#to sse the count of the table
+SELECT COUNT(*) FROM telco_db.telco_table_newtelco;
+
+#to see the 10 records 
+SELECT * 
+FROM telco_db.telco_table_newtelco 
+LIMIT 10;
+
+
+--Step 3: Data Quality Checks
+--(Numeric fields (seniorcitizen, tenure, monthlycharges, totalcharges) should appear as numbers (not NULL).)
+SELECT 
+    MIN(tenure) AS min_tenure, 
+    MAX(tenure) AS max_tenure, 
+    AVG(monthlycharges) AS avg_monthly, 
+    AVG(totalcharges) AS avg_total
+FROM telco_db.telco_table_newtelco;
+
+--(Distinct churn labels (to make sure Yes/No are showing):)
+SELECT DISTINCT churn FROM telco_db.telco_table_newtelco;
+
+-- (Check nulls / bad data:)
+SELECT COUNT(*) AS null_rows
+FROM telco_db.telco_table_newtelco
+WHERE customerid IS NULL 
+   OR churn IS NULL;
+
+
+
+# to create a view of churn rate
+
+CREATE OR REPLACE VIEW telco_db.vw_churn_rate AS
+SELECT 
+    churn,
+    COUNT(*) AS customer_count,
+    ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS pct
+FROM telco_db.telco_table_newtelco
+GROUP BY churn;
+
+
+
+# to create a view of churn_by_contract
+
+CREATE OR REPLACE VIEW telco_db.vw_churn_by_contract AS
+SELECT 
+    contract,
+    churn,
+    COUNT(*) AS customers
+FROM telco_db.telco_table_newtelco
+GROUP BY contract, churn
+ORDER BY contract;
+
+
+# to create a view of avg_charges_by_churn
+
+CREATE OR REPLACE VIEW telco_db.vw_avg_charges_by_churn AS
+SELECT 
+    churn,
+    ROUND(AVG(monthlycharges), 2) AS avg_monthly_charges,
+    ROUND(AVG(totalcharges), 2) AS avg_total_charges
+FROM telco_db.telco_table_newtelco
+GROUP BY churn;
+
+
+# to create a view of churn_by_payment
+
+CREATE OR REPLACE VIEW telco_db.vw_churn_by_payment AS
+SELECT 
+    paymentmethod,
+    churn,
+    COUNT(*) AS customers
+FROM telco_db.telco_table_newtelco
+GROUP BY paymentmethod, churn
+ORDER BY paymentmethod;
+
+
+#to create a view of churn_by_tenure
+CREATE OR REPLACE VIEW telco_db.vw_churn_by_tenure AS
+SELECT 
+    CASE 
+        WHEN tenure BETWEEN 0 AND 12 THEN '0-1 yr'
+        WHEN tenure BETWEEN 13 AND 24 THEN '1-2 yrs'
+        WHEN tenure BETWEEN 25 AND 48 THEN '2-4 yrs'
+        WHEN tenure BETWEEN 49 AND 72 THEN '4-6 yrs'
+        ELSE '6+ yrs'
+    END AS tenure_band,
+    churn,
+    COUNT(*) AS customers
+FROM telco_db.telco_table_newtelco
+GROUP BY 
+    CASE 
+        WHEN tenure BETWEEN 0 AND 12 THEN '0-1 yr'
+        WHEN tenure BETWEEN 13 AND 24 THEN '1-2 yrs'
+        WHEN tenure BETWEEN 25 AND 48 THEN '2-4 yrs'
+        WHEN tenure BETWEEN 49 AND 72 THEN '4-6 yrs'
+        ELSE '6+ yrs'
+    END,
+    churn
+ORDER BY tenure_band;
+
+
+#to create a view of churn_by_internet
+CREATE OR REPLACE VIEW telco_db.vw_churn_by_internet AS
+SELECT 
+    internetservice,
+    churn,
+    COUNT(*) AS customers
+FROM telco_db.telco_table_newtelco
+GROUP BY internetservice, churn
+ORDER BY internetservice;
+
+
+
+#to create a view of churn_by_gender
+CREATE OR REPLACE VIEW telco_db.vw_churn_by_gender AS
+SELECT 
+    gender,
+    churn,
+    COUNT(*) AS customers
+FROM telco_db.telco_table_newtelco
+GROUP BY gender, churn
+ORDER BY gender;
+
+
+#to create a view of churn_by_seniorcitizen
+CREATE OR REPLACE VIEW telco_db.vw_churn_by_seniorcitizen AS
+SELECT 
+    CASE WHEN seniorcitizen = 1 THEN 'Senior' ELSE 'Non-Senior' END AS senior_status,
+    churn,
+    COUNT(*) AS customers
+FROM telco_db.telco_table_newtelco
+GROUP BY CASE WHEN seniorcitizen = 1 THEN 'Senior' ELSE 'Non-Senior' END, churn;
+
+#to create a view of churn_by_family
+CREATE OR REPLACE VIEW telco_db.vw_churn_by_family AS
+SELECT 
+    partner,
+    dependents,
+    churn,
+    COUNT(*) AS customers
+FROM telco_db.telco_table_newtelco
+GROUP BY partner, dependents, churn
+ORDER BY partner, dependents;
+
+
+#to create a view of churn_by_services
+CREATE OR REPLACE VIEW telco_db.vw_churn_by_services AS
+SELECT 
+    churn,
+    SUM(CASE WHEN streamingtv = 'Yes' THEN 1 ELSE 0 END) AS streaming_tv_users,
+    SUM(CASE WHEN streamingmovies = 'Yes' THEN 1 ELSE 0 END) AS streaming_movies_users,
+    SUM(CASE WHEN techsupport = 'Yes' THEN 1 ELSE 0 END) AS techsupport_users,
+    SUM(CASE WHEN onlinesecurity = 'Yes' THEN 1 ELSE 0 END) AS onlinesecurity_users
+FROM telco_db.telco_table_newtelco
+GROUP BY churn;
+
+
+#to create a view of revenue_impact
+CREATE OR REPLACE VIEW telco_db.vw_revenue_impact AS
+SELECT 
+    churn,
+    ROUND(SUM(monthlycharges), 2) AS total_monthly_revenue,
+    ROUND(AVG(monthlycharges), 2) AS avg_monthly_revenue,
+    ROUND(SUM(totalcharges), 2) AS total_lifetime_revenue
+FROM telco_db.telco_table_newtelco
+GROUP BY churn;
+
+
+#to create a view of customer_segments
+CREATE OR REPLACE VIEW telco_db.vw_customer_segments AS
+SELECT 
+    CASE 
+        WHEN tenure <= 12 THEN 'New'
+        WHEN tenure BETWEEN 13 AND 36 THEN 'Established'
+        ELSE 'Loyal'
+    END AS customer_segment,
+    churn,
+    ROUND(AVG(monthlycharges),2) AS avg_monthly_spend,
+    COUNT(*) AS customer_count
+FROM telco_db.telco_table_newtelco
+GROUP BY 
+    CASE 
+        WHEN tenure <= 12 THEN 'New'
+        WHEN tenure BETWEEN 13 AND 36 THEN 'Established'
+        ELSE 'Loyal'
+    END, churn
+ORDER BY customer_segment;
+
+#
+SHOW VIEWS IN telco_db;
+#
+SELECT * FROM telco_db.vw_churn_rate LIMIT 5;
