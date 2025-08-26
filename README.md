@@ -2,6 +2,7 @@
 
 Welcome to the Customer Retention Automated Pipeline Project!  
 This project is designed to analyze and understand customer churn patterns using modern cloud-based technologies. By leveraging AWS S3, AWS Glue, Amazon Athena, and Power BI, the pipeline provides an end-to-end solution for storing, processing, querying, and visualizing customer data.
+
 ![S3-Glue-Athena-PowerBi](https://github.com/user-attachments/assets/070c6d18-fa8c-4b5b-a0f2-c75652779cf9)
 
 ---
